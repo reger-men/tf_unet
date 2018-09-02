@@ -431,12 +431,13 @@ class Trainer(object):
                 for step in range((epoch * training_iters), ((epoch + 1) * training_iters)):
                     batch_x, batch_y = data_provider(self.batch_size)
 
-                    # Run optimization op (backprop)
-                    _, loss, lr, gradients = sess.run(
-                        (self.optimizer, self.net.cost, self.learning_rate_node, self.net.gradients_node),
-                        feed_dict={self.net.x: batch_x,
-                                   self.net.y: util.crop_to_shape(batch_y, pred_shape),
-                                   self.net.keep_prob: dropout})
+                    with tf.device('/gpu:0'):
+                        # Run optimization op (backprop)
+                        _, loss, lr, gradients = sess.run(
+                            (self.optimizer, self.net.cost, self.learning_rate_node, self.net.gradients_node),
+                            feed_dict={self.net.x: batch_x,
+                                       self.net.y: util.crop_to_shape(batch_y, pred_shape),
+                                       self.net.keep_prob: dropout})
 
                     if self.net.summaries and self.norm_grads:
                         avg_gradients = _update_avg_gradients(avg_gradients, gradients, step)
