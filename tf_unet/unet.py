@@ -416,7 +416,7 @@ class Trainer(object):
         sess = tf.Session(config=config)
         init = self._initialize(training_iters, output_path, restore, prediction_path)
         
-        with tf.Session() as sess:
+        with sess:
             if write_graph:
                 tf.train.write_graph(sess.graph_def, output_path, "graph.pb", False)
 
