@@ -410,7 +410,7 @@ class Trainer(object):
 
         # Set up tf session and initialize variables. 
         config = tf.ConfigProto()
-        #config.gpu_options.allow_growth = True
+        config.gpu_options.allow_growth = True
         #config.allow_soft_placement=True
         #config.gpu_options.allocator_type = 'BFC'
         sess = tf.Session(config=config)
