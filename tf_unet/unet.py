@@ -78,32 +78,33 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16,
     size = in_size
     # down layers
     for layer in range(0, layers):
-        with tf.name_scope("down_conv_{}".format(str(layer))):
-            features = 2 ** layer * features_root
-            stddev = np.sqrt(2 / (filter_size ** 2 * features))
-            if layer == 0:
-                w1 = weight_variable([filter_size, filter_size, channels, features], stddev, name="w1")
-            else:
-                w1 = weight_variable([filter_size, filter_size, features // 2, features], stddev, name="w1")
+        with tf.device('/gpu:%d' % layer):
+            with tf.name_scope("down_conv_{}".format(str(layer))):
+                features = 2 ** layer * features_root
+                stddev = np.sqrt(2 / (filter_size ** 2 * features))
+                if layer == 0:
+                    w1 = weight_variable([filter_size, filter_size, channels, features], stddev, name="w1")
+                else:
+                    w1 = weight_variable([filter_size, filter_size, features // 2, features], stddev, name="w1")
 
-            w2 = weight_variable([filter_size, filter_size, features, features], stddev, name="w2")
-            b1 = bias_variable([features], name="b1")
-            b2 = bias_variable([features], name="b2")
+                w2 = weight_variable([filter_size, filter_size, features, features], stddev, name="w2")
+                b1 = bias_variable([features], name="b1")
+                b2 = bias_variable([features], name="b2")
 
-            conv1 = conv2d(in_node, w1, b1, keep_prob)
-            tmp_h_conv = tf.nn.relu(conv1)
-            conv2 = conv2d(tmp_h_conv, w2, b2, keep_prob)
-            dw_h_convs[layer] = tf.nn.relu(conv2)
+                conv1 = conv2d(in_node, w1, b1, keep_prob)
+                tmp_h_conv = tf.nn.relu(conv1)
+                conv2 = conv2d(tmp_h_conv, w2, b2, keep_prob)
+                dw_h_convs[layer] = tf.nn.relu(conv2)
 
-            weights.append((w1, w2))
-            biases.append((b1, b2))
-            convs.append((conv1, conv2))
+                weights.append((w1, w2))
+                biases.append((b1, b2))
+                convs.append((conv1, conv2))
 
-            size -= 4
-            if layer < layers - 1:
-                pools[layer] = max_pool(dw_h_convs[layer], pool_size)
-                in_node = pools[layer]
-                size /= 2
+                size -= 4
+                if layer < layers - 1:
+                    pools[layer] = max_pool(dw_h_convs[layer], pool_size)
+                    in_node = pools[layer]
+                    size /= 2
 
     in_node = dw_h_convs[layers - 1]
 
@@ -410,7 +411,7 @@ class Trainer(object):
 
         # Set up tf session and initialize variables. 
         config = tf.ConfigProto()
-        #config.gpu_options.allow_growth = True
+        #config.gpu_options.allow_growth = True # This caused OOM issue for big model size!
         config.allow_soft_placement=True
         config.gpu_options.allocator_type = 'BFC'
         sess = tf.Session(config=config)
@@ -439,13 +440,12 @@ class Trainer(object):
                 for step in range((epoch * training_iters), ((epoch + 1) * training_iters)):
                     batch_x, batch_y = data_provider(self.batch_size)
 
-                    with tf.device('/gpu:0'):
-                        # Run optimization op (backprop)
-                        _, loss, lr, gradients = sess.run(
-                            (self.optimizer, self.net.cost, self.learning_rate_node, self.net.gradients_node),
-                            feed_dict={self.net.x: batch_x,
-                                       self.net.y: util.crop_to_shape(batch_y, pred_shape),
-                                       self.net.keep_prob: dropout})
+                    # Run optimization op (backprop)
+                    _, loss, lr, gradients = sess.run(
+                        (self.optimizer, self.net.cost, self.learning_rate_node, self.net.gradients_node),
+                        feed_dict={self.net.x: batch_x,
+                                   self.net.y: util.crop_to_shape(batch_y, pred_shape),
+                                   self.net.keep_prob: dropout})
 
                     if self.net.summaries and self.norm_grads:
                         avg_gradients = _update_avg_gradients(avg_gradients, gradients, step)
