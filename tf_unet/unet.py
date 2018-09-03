@@ -110,41 +110,43 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16,
 
     # up layers
     for layer in range(layers - 2, -1, -1):
-        with tf.name_scope("up_conv_{}".format(str(layer))):
-            features = 2 ** (layer + 1) * features_root
-            stddev = np.sqrt(2 / (filter_size ** 2 * features))
+        with tf.device('/gpu:%d' % layer+4):
+            with tf.name_scope("up_conv_{}".format(str(layer))):
+                features = 2 ** (layer + 1) * features_root
+                stddev = np.sqrt(2 / (filter_size ** 2 * features))
 
-            wd = weight_variable_devonc([pool_size, pool_size, features // 2, features], stddev, name="wd")
-            bd = bias_variable([features // 2], name="bd")
-            h_deconv = tf.nn.relu(deconv2d(in_node, wd, pool_size) + bd)
-            h_deconv_concat = crop_and_concat(dw_h_convs[layer], h_deconv)
-            deconv[layer] = h_deconv_concat
+                wd = weight_variable_devonc([pool_size, pool_size, features // 2, features], stddev, name="wd")
+                bd = bias_variable([features // 2], name="bd")
+                h_deconv = tf.nn.relu(deconv2d(in_node, wd, pool_size) + bd)
+                h_deconv_concat = crop_and_concat(dw_h_convs[layer], h_deconv)
+                deconv[layer] = h_deconv_concat
 
-            w1 = weight_variable([filter_size, filter_size, features, features // 2], stddev, name="w1")
-            w2 = weight_variable([filter_size, filter_size, features // 2, features // 2], stddev, name="w2")
-            b1 = bias_variable([features // 2], name="b1")
-            b2 = bias_variable([features // 2], name="b2")
+                w1 = weight_variable([filter_size, filter_size, features, features // 2], stddev, name="w1")
+                w2 = weight_variable([filter_size, filter_size, features // 2, features // 2], stddev, name="w2")
+                b1 = bias_variable([features // 2], name="b1")
+                b2 = bias_variable([features // 2], name="b2")
 
-            conv1 = conv2d(h_deconv_concat, w1, b1, keep_prob)
-            h_conv = tf.nn.relu(conv1)
-            conv2 = conv2d(h_conv, w2, b2, keep_prob)
-            in_node = tf.nn.relu(conv2)
-            up_h_convs[layer] = in_node
+                conv1 = conv2d(h_deconv_concat, w1, b1, keep_prob)
+                h_conv = tf.nn.relu(conv1)
+                conv2 = conv2d(h_conv, w2, b2, keep_prob)
+                in_node = tf.nn.relu(conv2)
+                up_h_convs[layer] = in_node
 
-            weights.append((w1, w2))
-            biases.append((b1, b2))
-            convs.append((conv1, conv2))
+                weights.append((w1, w2))
+                biases.append((b1, b2))
+                convs.append((conv1, conv2))
 
-            size *= 2
-            size -= 4
+                size *= 2
+                size -= 4
 
     # Output Map
-    with tf.name_scope("output_map"):
-        weight = weight_variable([1, 1, features_root, n_class], stddev)
-        bias = bias_variable([n_class], name="bias")
-        conv = conv2d(in_node, weight, bias, tf.constant(1.0))
-        output_map = tf.nn.relu(conv)
-        up_h_convs["out"] = output_map
+    with tf.device('/gpu:%d' % 6):
+        with tf.name_scope("output_map"):
+            weight = weight_variable([1, 1, features_root, n_class], stddev)
+            bias = bias_variable([n_class], name="bias")
+            conv = conv2d(in_node, weight, bias, tf.constant(1.0))
+            output_map = tf.nn.relu(conv)
+            up_h_convs["out"] = output_map
 
     if summaries:
         with tf.name_scope("summaries"):
