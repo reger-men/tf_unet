@@ -406,8 +406,16 @@ class Trainer(object):
         if epochs == 0:
             return save_path
 
-        init = self._initialize(training_iters, output_path, restore, prediction_path)
+        
 
+        # Set up tf session and initialize variables. 
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        config.allow_soft_placement=True
+        config.gpu_options.allocator_type = 'BFC'
+        sess = tf.Session(config=config)
+        init = self._initialize(training_iters, output_path, restore, prediction_path)
+        
         with tf.Session() as sess:
             if write_graph:
                 tf.train.write_graph(sess.graph_def, output_path, "graph.pb", False)
