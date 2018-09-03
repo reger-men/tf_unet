@@ -110,7 +110,7 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16,
 
     # up layers
     for layer in range(layers - 2, -1, -1):
-        with tf.device('/gpu:%d' % layer+4):
+        with tf.device('/gpu:%d' % (layer + 4)):
             with tf.name_scope("up_conv_{}".format(str(layer))):
                 features = 2 ** (layer + 1) * features_root
                 stddev = np.sqrt(2 / (filter_size ** 2 * features))
