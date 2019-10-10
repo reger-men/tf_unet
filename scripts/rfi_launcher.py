@@ -16,24 +16,21 @@
 Created on Jul 28, 2016
 
 author: jakeret
+
+Trains a tf_unet network to segment radio frequency interference pattern.
+Requires data from the Bleien Observatory or a HIDE&SEEK simulation.
 '''
+
 from __future__ import print_function, division, absolute_import, unicode_literals
-import os
 import glob
 import click
+import h5py
+import numpy as np
 
 from tf_unet import unet
 from tf_unet import util
+from tf_unet.image_util import BaseDataProvider
 
-from scripts.radio_util import DataProvider
-
-def create_training_path(output_path):
-    idx = 0
-    path = os.path.join(output_path, "run_{:03d}".format(idx))
-    while os.path.exists(path):
-        idx += 1
-        path = os.path.join(output_path, "run_{:03d}".format(idx))
-    return path
 
 @click.command()
 @click.option('--data_root', default="./bleien_data")
@@ -54,7 +51,7 @@ def launch(data_root, output_path, training_iters, epochs, restore, layers, feat
                     cost_kwargs=dict(regularizer=0.001),
                     )
     
-    path = output_path if restore else create_training_path(output_path)
+    path = output_path if restore else util.create_training_path(output_path)
     trainer = unet.Trainer(net, optimizer="momentum", opt_kwargs=dict(momentum=0.2))
     path = trainer.train(data_provider, path, 
                          training_iters=training_iters, 
@@ -68,6 +65,48 @@ def launch(data_root, output_path, training_iters, epochs, restore, layers, feat
      
     print("Testing error rate: {:.2f}%".format(unet.error_rate(prediction, util.crop_to_shape(y_test, prediction.shape))))
     
+
+class DataProvider(BaseDataProvider):
+    """
+    Extends the BaseDataProvider to randomly select the next
+    data chunk
+    """
+
+    channels = 1
+    n_class = 2
+
+    def __init__(self, nx, files, a_min=30, a_max=210):
+        super(DataProvider, self).__init__(a_min, a_max)
+        self.nx = nx
+        self.files = files
+
+        assert len(files) > 0, "No training files"
+        print("Number of files used: %s"%len(files))
+        self._cylce_file()
+
+    def _read_chunck(self):
+        with h5py.File(self.files[self.file_idx], "r") as fp:
+            nx = fp["data"].shape[1]
+            idx = np.random.randint(0, nx - self.nx)
+
+            sl = slice(idx, (idx+self.nx))
+            data = fp["data"][:, sl]
+            rfi = fp["mask"][:, sl]
+        return data, rfi
+
+    def _next_data(self):
+        data, rfi = self._read_chunck()
+        nx = data.shape[1]
+        while nx < self.nx:
+            self._cylce_file()
+            data, rfi = self._read_chunck()
+            nx = data.shape[1]
+
+        return data, rfi
+
+    def _cylce_file(self):
+        self.file_idx = np.random.choice(len(self.files))
+
 
 if __name__ == '__main__':
     launch()
